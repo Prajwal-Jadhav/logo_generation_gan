@@ -223,11 +223,12 @@ for epoch in range(opt.n_epochs):
         if batches_done % opt.sample_interval == 0:
             sample_image(n_row=12, batches_done=batches_done)
 
-    os.makedirs(f"saved_models/epoch_{epoch}_", exist_ok=True)
-    torch.save({
-            'generator_state_dict': generator.state_dict(),
-            'discriminator_state_dict': discriminator.state_dict(),
-            'generator_optimizer_state_dict': optimizer_G.state_dict(),
-            'discriminator_optimizer_state_dict': optimizer_D.state_dict(),
-        }, f'saved_models/epoch_{epoch}_/cgan_model_{i}.pth')
+    if epoch % 20 == 0:
+        os.makedirs(f"saved_models/epoch_{epoch}_", exist_ok=True)
+        torch.save({
+                'generator_state_dict': generator.state_dict(),
+                'discriminator_state_dict': discriminator.state_dict(),
+                'generator_optimizer_state_dict': optimizer_G.state_dict(),
+                'discriminator_optimizer_state_dict': optimizer_D.state_dict(),
+            }, f'saved_models/epoch_{epoch}_/cgan_model_{i}.pth')
     
