@@ -7,9 +7,13 @@ import torch
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
+from torchvision.utils import Image
+from torch.utils import data
 import numpy as np
 import pandas as pd
 import math
+import os
+import csv
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -20,35 +24,44 @@ transform = transforms.Compose([
     transforms.Normalize((0.5,), (0.5,))
 ])
 
-# Load the image dataset
-dataset = datasets.ImageFolder('./data', transform=transform)
-
 # Load the one-hot encoded labels from the CSV file
 labels_df = pd.read_csv('./labels.csv', header=None)
 labels = torch.from_numpy(np.array(labels_df.values)).float()
 
 # Convert the one-hot encoded labels to class indices
-class_indices = torch.argmax(labels, dim=1)
+class_indices = torch.argmax(labels, dim=0)
 
 # Combine the images and class indices into a single dataset
 class LabeledDataset(torch.utils.data.Dataset):
-    def __init__(self, image_dataset, class_indices):
-        self.image_dataset = image_dataset
+    def __init__(self, main_dir, class_indices):
+        self.main_dir = main_dir
+        self.transform = transform
+        self.all_imgs = os.listdir(main_dir)
         self.class_indices = class_indices
+        file = open('labels.csv', 'r')
+
+        # Read its contents into a list of lists
+        reader = csv.reader(file)
+        self.labels = [row for row in reader]
+
+        
 
     def __getitem__(self, index):
-        image, _ = self.image_dataset[index]
-        class_index = self.class_indices[index]
-        return image, class_index
+        img_loc = os.path.join(self.main_dir, self.all_imgs[index])
+        image = Image.open(img_loc).convert("RGB")
+        tensor_image = self.transform(image)
+
+        class_index = self.labels[index].index("1")
+        return tensor_image, class_index
 
     def __len__(self):
-        return len(self.image_dataset)
+        return len(self.all_imgs)
 
-labeled_dataset = LabeledDataset(dataset, class_indices)
+labeled_dataset = LabeledDataset("./data", class_indices)
 
 # Define the dataloader
 batch_size = 64
-dataloader = torch.utils.data.DataLoader(labeled_dataset, batch_size=batch_size, shuffle=True)
+dataloader = data.DataLoader(labeled_dataset, batch_size=batch_size, shuffle=False)
 
 class CGANGenerator(nn.Module):
     def __init__(self, latent_dim, num_classes, img_shape):
@@ -106,8 +119,8 @@ class CGANDiscriminator(nn.Module):
         
         # input layer for class label tensor
         self.label_layer = nn.Sequential(
-            nn.Embedding(self.num_classes, 16),
-            nn.Linear(16, 64*64)
+            nn.Embedding(self.num_classes, 512),
+            nn.Linear(512, 64*64)
         )
         
         # output layers for image and label tensors
@@ -119,6 +132,8 @@ class CGANDiscriminator(nn.Module):
     def forward(self, image, class_index):
         image_features = self.image_layer(image)
         class_embed = self.label_layer(class_index).view(-1, 1, 64, 64)
+        print(image_features.shape)
+        print(class_embed.shape)
         combined = torch.cat((image_features, class_embed), dim=1)
         output = self.output_layer(combined)
         return output.view(-1, 1).squeeze(1)
@@ -139,7 +154,7 @@ def train_cgan(generator, discriminator, dataloader, device, num_classes, latent
             # Move data to device
             images = images.to(device)
             labels = labels.to(device)
-            class_indices = torch.argmax(labels, dim=1)
+            class_indices = torch.argmax(labels, dim=0)
             
             # Train discriminator
             discriminator.zero_grad()
