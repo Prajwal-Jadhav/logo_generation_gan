@@ -157,6 +157,9 @@ def sample_image(n_row, batches_done):
     save_image(gen_imgs.data, "images/%d.png" % batches_done, nrow=n_row, normalize=True)
 
 
+metric_file = open("loss_metrics.csv", "w+")
+metric_file.write("epoch;batch;d_loss;g_loss")
+
 # ----------
 #  Training
 # ----------
@@ -214,16 +217,21 @@ for epoch in range(opt.n_epochs):
         d_loss.backward()
         optimizer_D.step()
 
+        d_loss_value = d_loss.item()
+        g_loss_value = g_loss.item()
+
         print(
             "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-            % (epoch, opt.n_epochs, i, len(dataloader), d_loss.item(), g_loss.item())
+            % (epoch, opt.n_epochs, i, len(dataloader), d_loss_value, g_loss_value)
         )
+
+        metric_file.write(f"\n{epoch};{i};{d_loss_value};{g_loss_value}")
 
         batches_done = epoch * len(dataloader) + i
         if batches_done % opt.sample_interval == 0:
             sample_image(n_row=12, batches_done=batches_done)
 
-    if epoch % 20 == 0:
+    if epoch % 200 == 0:
         os.makedirs(f"saved_models/epoch_{epoch}_", exist_ok=True)
         torch.save({
                 'generator_state_dict': generator.state_dict(),
@@ -231,4 +239,5 @@ for epoch in range(opt.n_epochs):
                 'generator_optimizer_state_dict': optimizer_G.state_dict(),
                 'discriminator_optimizer_state_dict': optimizer_D.state_dict(),
             }, f'saved_models/epoch_{epoch}_/cgan_model_{i}.pth')
+
     
